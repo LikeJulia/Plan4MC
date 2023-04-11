@@ -73,8 +73,9 @@ def build_pretrain_model(image_config,text_config,temporal_config,adapter_config
     
     if not state_dict is None :
         state_dict_back = model.state_dict()
-        state_dict_back.update(state_dict)
-        print(state_dict_back.keys())
+        new_state_dict = {k: v for k, v in state_dict.items() if k != "state_dict"}
+        state_dict_back.update(new_state_dict)
+
         model.load_state_dict(state_dict_back)
     
     return model
