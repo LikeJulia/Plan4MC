@@ -126,6 +126,28 @@ harvest_wool_with_crafting_table_and_iron_ingot:
   initial_mob_spawn_range_high: [30, 1, 30]
   max_steps: 3000
 
+harvest_milk_with_bucket:
+  biome: "plains"
+  target_name: "milk_bucket"
+  target_quantity: 1
+  initial_inventory:
+    bucket: 1
+  initial_mobs: ["cow","cow","cow","sheep","sheep","sheep"]
+  initial_mob_spawn_range_low: [-30, 1, -30]
+  initial_mob_spawn_range_high: [30, 1, 30]
+  max_steps: 3000
+
+harvest_wool_with_shears:
+  biome: "plains"
+  target_name: "wool"
+  target_quantity: 1
+  initial_inventory:
+    shears: 1
+  initial_mobs: ["cow","cow","cow","sheep","sheep","sheep"]
+  initial_mob_spawn_range_low: [-30, 1, -30]
+  initial_mob_spawn_range_high: [30, 1, 30]
+  max_steps: 3000
+
 craft_bed_with_crafting_table_and_shears:
   biome: "plains"
   target_name: "bed"
@@ -218,3 +240,39 @@ harvest_cooked_mutton_with_furnace_and_diamond_sword:
   initial_mob_spawn_range_low: [-30, 1, -30]
   initial_mob_spawn_range_high: [30, 1, 30]
   max_steps: 10000
+
+
+## SS transformer
+
+harvest_milk_with_empty_bucket_and_cow:
+  biome: "plains"
+  target_name: "milk_bucket"
+  target_quantity: 1
+  initial_inventory:
+    bucket: 1
+  initial_mobs: ["cow"]
+  initial_mob_spawn_range_low: [-5, 1, -5]
+  initial_mob_spawn_range_high: [5, 1, 5]
+  max_steps: 1000
+
+harvest_wool_with_shears_base:
+  biome: "plains"
+  target_name: "wool"
+  target_quantity: 1
+  initial_inventory:
+    shears: 1
+  initial_mobs: ["sheep"]
+  initial_mob_spawn_range_low: [-5, 1, -5]
+  initial_mob_spawn_range_high: [5, 1, 5]
+  max_steps: 500
+
+harvest_mutton_with_diamond_sword_and_sheep:
+  biome: "plains"
+  target_name: "mutton"
+  target_quantity: 1
+  initial_inventory:
+    diamond_sword: 1
+  initial_mobs: ["sheep"]
+  initial_mob_spawn_range_low: [-5, 1, -5]
+  initial_mob_spawn_range_high: [5, 1, 5]
+  max_steps: 1000

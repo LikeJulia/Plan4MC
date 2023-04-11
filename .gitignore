@@ -1,0 +1,7 @@
+ssmodel-exp/
+*.png
+*.gif
+*.log
+*.pyc
+*.pth
+*.pkl
