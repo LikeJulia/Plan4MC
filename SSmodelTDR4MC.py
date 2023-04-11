@@ -18,7 +18,6 @@ import torch.nn.functional as F
 # from tensorboardX import SummaryWriter
 from torch.nn.utils import spectral_norm
 import imageio.v2 as imageio
-from PIL import ImageSequence,Image
 
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -679,53 +678,44 @@ class SSTransformer(nn.Module):
         plt.show()
         print()
 
-    def cal_intrinsic_s2e(self, states_ls, steps_ls):
+    def cal_intrinsic_s2e(self, states_ls,device = torch.device('cuda')):
         '''
         states:(block_size+1,4,84,84)
         step:标量
         '''
-        device = states_ls[0][0].device
         self.eval()
         with torch.no_grad():
             prediction_error = torch.Tensor(0).to(device)
             discrimination_score = torch.Tensor(0).to(device)
             progress_span = torch.Tensor(0).to(device)
-            ss_intrinsic = torch.Tensor(0).to(device)
-            for i in range(len(steps_ls)):
-                step = steps_ls[i]
-                states = torch.stack(states_ls[i])
-                if len(states) <= 1: continue
-                with torch.no_grad():
-                    embeddings = self.encoder(states)
-                    embeddings = embeddings.unsqueeze(0)  # (1, block_size+1, n_embd)
-                    cur_embedding, next_embedding = embeddings[:, :-1, :], embeddings[:, 1:,
-                                                                           :]  # (1, block_size+1, n_embd)
-                    # Positional Embedding
-                    step = step.clip(max=self.config.max_timestep - 1)
-                    position_encodings = self.pos_emb[:, :cur_embedding.shape[1], :]
-                    position_encodings = position_encodings + self.global_pos_emb.repeat_interleave(
-                        cur_embedding.shape[0], dim=0) \
-                        .gather(1, step.repeat_interleave(self.config.n_embd, dim=-1))
-                    delta_embedding = self.out(self.ln_f(
-                        self.blocks(self.drop(cur_embedding + position_encodings))))  # (1, block_size, n_embd)
-                    pred_embedding = cur_embedding + delta_embedding
-                    # Intrinsic Reward
-                    '''
-                    pred_emb - next_emb = [Δ1, Δ2, ..., Δn], intrinsic:
-                    1. Δ1^2 + Δ2^2 + ... + Δn^2                     L2^2
-                    2. √(Δ1^2 + Δ2^2 + ... + Δn^2)                  L2
-                    3. |Δ1| + |Δ2| + ... + |Δn|                     L1
-                    4. D(cur_emb,pred_emb) - D(cur_emb,next_emb)    Adversary
-                    '''
-                    pe = F.mse_loss(pred_embedding, next_embedding, reduction='none').sum(-1).view(-1)
-                    ds = (self.discriminator(cur_embedding, pred_embedding) - self.discriminator(cur_embedding,
-                                                                                                 next_embedding)).view(
-                        -1)
-                    ps = self.tdr.symexp(self.tdr(cur_embedding, pred_embedding).view(-1))
-                    prediction_error = torch.cat((prediction_error, pe), dim=0)
-                    discrimination_score = torch.cat((discrimination_score, ds), dim=0)
-                    progress_span = torch.cat((progress_span, ps), dim=0)
-            return prediction_error, discrimination_score, progress_span
+            for i in range(0,states_ls.shape[1],self.config.block_size):
+                states = states_ls[:,i:i+self.config.block_size+1,...].to(device)
+                embeddings = self.encoder(states[0]).unsqueeze(0)  # (1, block_size+1, n_embd)
+                cur_embedding, next_embedding = embeddings[:, :-1, :], embeddings[:, 1:,:]  # (1, block_size+1, n_embd)
+                # Positional Embedding
+                block_size = cur_embedding.shape[1]
+                position_encodings = self.pos_emb[:, :block_size, :]
+                encoded_embedding = cur_embedding + position_encodings
+                # position_encodings = position_encodings + self.global_pos_emb.repeat_interleave(cur_embedding.shape[0], dim=0).gather(1, step.repeat_interleave(self.config.n_embd, dim=-1))
+                delta_embedding = self.out(self.ln_f(self.blocks(self.drop(encoded_embedding))))  # (1, block_size, n_embd)
+                pred_embedding = cur_embedding + delta_embedding
+                # Intrinsic Reward
+                '''
+                pred_emb - next_emb = [Δ1, Δ2, ..., Δn], intrinsic:
+                1. Δ1^2 + Δ2^2 + ... + Δn^2                     L2^2
+                2. √(Δ1^2 + Δ2^2 + ... + Δn^2)                  L2
+                3. |Δ1| + |Δ2| + ... + |Δn|                     L1
+                4. D(cur_emb,pred_emb) - D(cur_emb,next_emb)    Adversary
+                '''
+                pe = F.mse_loss(pred_embedding, next_embedding, reduction='none').sum(-1).view(-1)
+                ds = (self.discriminator(cur_embedding, pred_embedding) - self.discriminator(cur_embedding,
+                                                                                                next_embedding)).view(
+                    -1)
+                ps = self.tdr.symexp(self.tdr(cur_embedding, pred_embedding).view(-1))
+                prediction_error = torch.cat((prediction_error, pe), dim=0)
+                discrimination_score = torch.cat((discrimination_score, ds), dim=0)
+                progress_span = torch.cat((progress_span, ps), dim=0)
+            return prediction_error.detach().cpu().numpy(), discrimination_score.detach().cpu().numpy(), progress_span.detach().cpu().numpy()
 
 
 def setseed(seed):
