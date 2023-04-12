@@ -570,14 +570,16 @@ class SSTransformer(nn.Module):
         return L2_loss.item(), G_loss.item(), D_loss.item(), tdr_loss.item(), loss.item()
 
     def trainss(self):
+
         # gif2pkl(src_root)
-        # 训练
-        save_dir = f'ssmodel-exp/{task}_TDR/'
+
+        save_dir = f'ssmodel-exp/{args.task}_TDR/'
         exp_logger = Logger(save_dir, f'trainss.csv',
                             fieldnames=['update', 'Total_loss', 'L2_loss', 'G_loss', 'D_loss', 'TDR_loss'])
         self.train()  # 测试时model.eval()关闭dropout和batchnorm
         num = 0
         for i_epoch in range(self.config.n_epoch):
+            print(f'Epoch {i_epoch}')
             for each in glob(os.path.join(src_root,'*success1.pkl')):
                 states = pickle.load(open(each,'rb'))
                 for i in range(4):
@@ -597,86 +599,7 @@ class SSTransformer(nn.Module):
         torch.save(self.state_dict(), f'{save_dir}/{num}.pth')
         print()
 
-    def test_TDR(self):
-        avg_dis = []
-        self.eval()
-        for i_data, d in enumerate(src, 1):
-            states = pickle.load(open(os.path.join('../expert\Breakout\clipped', d), 'rb'))['states']
-            step = torch.arange(0, states.shape[0] - self.config.block_size - 1, self.config.block_size).long().view(-1,1,1)  # (config.batch_size,1,1)
-            batch = torch.Tensor(states[np.array([list(range(id, id + self.config.block_size + 1)) for id in
-                                                  step])]) / 255.0  # (config.batch_size, config.block_size+1, 4, 84, 84)
-            step, batch = step.to(device), batch.to(device)
-            batch_size, block_size, c, w, h = batch.shape
-            embeddings = self.encoder(batch.view(-1, c, w, h)).view(batch_size, block_size,
-                                                                    self.config.n_embd)  # 先展平再reshape回
-            input_embedding = embeddings[:, :-1, :]
-            # time-distance
-            idx1 = np.arange(self.config.block_size)
-            idx2 = np.random.permutation(self.config.block_size)
-            idx1, idx2 = torch.LongTensor(idx1).to(device), torch.LongTensor(idx2).to(device)
-            time_dis = self.tdr.symlog(idx1, idx2).repeat(batch_size)
-            time_pred = self.tdr(input_embedding[:, idx1, :], input_embedding[:, idx2, :])
-            tdr_loss = F.mse_loss(time_pred, time_dis).item()
-            avg_dis.append(tdr_loss)
-            if i_data % 10 == 0:
-                print('Test: [{}/{}] | dis:{}'.format(i_data, len(src), tdr_loss))
-        print(f'Average distance:{np.mean(avg_dis)}')
 
-    def visulize_embedding(self, dim=2):  # TSNE对torch张量降维
-        self.eval()
-        states = pickle.load(open(os.path.join('../expert\Breakout\clipped', src[0]), 'rb'))['states']
-        step = torch.arange(0, states.shape[0] - config.block_size - 1, config.block_size).long().view(-1, 1, 1)
-        batch = torch.Tensor(states[np.array([list(range(id, id + config.block_size + 1)) for id in step])]) / 255.0
-        step, batch = step.to(device), batch.to(device)
-        batch_size, block_size, c, w, h = batch.shape
-        embeddings = self.encoder(batch.view(-1, c, w, h)).view(batch_size, block_size, self.config.n_embd)
-        input_embedding, target_embedding = embeddings[:, :-1, :], embeddings[:, 1:, :]
-        # 位置编码:局部(+全局)
-        position_encodings = self.pos_emb[:, :input_embedding.shape[1], :]
-        if step is not None:
-            timesteps = step.clip(max=self.config.max_timestep - 1)
-            position_encodings = position_encodings + self.global_pos_emb.repeat_interleave(
-                input_embedding.shape[0], dim=0).gather(1, timesteps.repeat_interleave(self.config.n_embd, dim=-1))
-        # 核心
-        x = self.ln_f(self.blocks(self.drop(input_embedding + position_encodings)))  # (bs,block_size,n_emb)
-        # 输出
-        delta_embedding = self.out(x)
-        pred_embedding = delta_embedding + input_embedding
-        # 降维
-        tsne = TSNE(n_components=dim, init='pca', random_state=0, perplexity=30.0, n_iter=1000,
-                    verbose=0)  # verbose=0不输出日志
-        vis_in = tsne.fit_transform(input_embedding.reshape(-1, self.config.n_embd).detach().cpu().numpy())
-        vis_out = tsne.fit_transform(pred_embedding.reshape(-1, self.config.n_embd).detach().cpu().numpy())
-        # 可视化
-        params = {
-            "font.size": 14,  # 全局字号
-            'font.family': 'STIXGeneral',  # 全局字体，微软雅黑(Microsoft YaHei)可显示中文
-            "figure.subplot.wspace": 0.2,  # 图-子图-宽度百分比
-            "figure.subplot.hspace": 0.4,  # 图-子图-高度百分比
-            "axes.spines.right": True,  # 坐标系-右侧线
-            "axes.spines.top": True,  # 坐标系-上侧线
-            "axes.titlesize": 14,  # 坐标系-标题-字号
-            "axes.labelsize": 14,  # 坐标系-标签-字号
-            "legend.fontsize": 14,  # 图例-字号
-            "xtick.labelsize": 12,  # 刻度-标签-字号
-            "ytick.labelsize": 12,  # 刻度-标签-字号
-            "xtick.direction": 'in',  # 刻度-方向
-            "ytick.direction": 'in',  # 刻度-方向
-            "axes.grid": True,  # 坐标系-网格
-            # "grid.linestyle": "--"  # 网格-线型
-        }
-        plt.rcParams.update(params)
-        if dim == 2:
-            plt.scatter(vis_in[:, 0], vis_in[:, 1], c='b', marker='o', s=10, alpha=0.5, label='$e_t$')
-            plt.scatter(vis_out[:, 0], vis_out[:, 1], c='r', marker='o', s=10, alpha=0.5, label='$e_{t+1}$')
-        else:
-            from mpl_toolkits.mplot3d import Axes3D
-            plt.scatter(vis_in[:, 0], vis_in[:, 1], vis_in[:, 2], c='b', marker='o', s=10, alpha=0.5, label='$e_t$')
-            plt.scatter(vis_out[:, 0], vis_out[:, 1], vis_out[:, 2], c='r', marker='o', s=10, alpha=0.5,
-                        label='$e_{t+1}$')
-        plt.legend(loc='best')
-        plt.show()
-        print()
 
     def cal_intrinsic_s2e(self, states_ls,device = torch.device('cuda')):
         '''
@@ -768,10 +691,11 @@ def gif2pkl(dataset_path):
             print(f'{i}/{len(src)}')
 
 if __name__ == '__main__':
-    task = 'milk'
+    
     parser = argparse.ArgumentParser()
+    parser.add_argument('--task', type=str, required=True)
     parser.add_argument('--seed', type=int, default=666)
-    parser.add_argument('--src_root', type=str, default='test_hard_tasks/harvest_milk_with_empty_bucket_and_cow')
+    parser.add_argument('--src_root', type=str, required=True)
     parser.add_argument('--block_size', type=int, default=200)
     args = parser.parse_args()
     seed = args.seed

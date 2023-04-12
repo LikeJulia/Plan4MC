@@ -19,7 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('--save-path', type=str, default='checkpoint') # model save path
     parser.add_argument('--exp-name', type=str, default='ppo') # log name
     #parser.add_argument('--mode', type=str, default='DIRECT') # GUI if use real time render
-    parser.add_argument('--task', type=str, default='harvest_milk_with_empty_bucket_and_cow') # task_id
+    parser.add_argument('--task', type=str,required=True) # task_id
     parser.add_argument('--horizon', type=int, default=500) # task horizon. 500 in the current released code
 
     # CLIP model and agent model config
@@ -62,13 +62,13 @@ if __name__ == '__main__':
     parser.add_argument('--dis', type=int, default=4)
     parser.add_argument('--expseed', type=int, default=0)
     parser.add_argument('--only-clip', type=int, default=0)
-    parser.add_argument('--lmbda', type=float, default=0.1)
+    parser.add_argument('--lmbda', type=float, default=0.9)
     args = parser.parse_args()
     #print(args)
     
     
     task_abbr = [each for each in ['milk','wool','leaves'] if each in args.task][0]
-    args.exp_name = f"{args.exp_name}_{task_abbr}_{'' if not args.env_reward else 're'}{args.ss_coff}{args.intri_type}_seed{args.expseed}"
+    args.exp_name = f"{args.exp_name}_{task_abbr}_{'' if not args.env_reward else 're'}{args.ss_coff}{args.intri_type}_lbmda{args.lmbda}_seed{args.expseed}"
     if not os.path.exists(args.save_path): os.mkdir(args.save_path)
     args.save_path = os.path.join(args.save_path, args.exp_name)
     if not os.path.exists(args.save_path): os.mkdir(args.save_path)
@@ -84,9 +84,9 @@ if __name__ == '__main__':
 
     if not args.use_ss_reward:
         if args.both:
-            from ppo_selfimitate_clip_ss import ppo_selfimitate_clip_ss
+            from ppo_intrinsic_ss_mc import ppo_selfimitate_ss
             print('Training ppo_selfimitate_clip_ss.')
-            ppo_selfimitate_clip_ss(args,
+            ppo_selfimitate_ss(args,
                 gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
                 seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
                 logger_kwargs=logger_kwargs, device=device, 
