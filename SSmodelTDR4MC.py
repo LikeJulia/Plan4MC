@@ -581,7 +581,7 @@ class SSTransformer(nn.Module):
             for each in glob(os.path.join(src_root,'*success1.pkl')):
                 states = pickle.load(open(each,'rb'))
                 for i in range(4):
-                    if states.shape[0]<config.block_size:
+                    if states.shape[0]<=config.block_size:
                         batch = torch.Tensor(states/ 255.).unsqueeze(0)
                     else:
                         b = states.shape[0] - self.config.block_size
@@ -690,6 +690,7 @@ class SSTransformer(nn.Module):
             progress_span = torch.Tensor(0).to(device)
             for i in range(0,states_ls.shape[1],self.config.block_size):
                 states = states_ls[:,i:i+self.config.block_size+1,...].to(device)
+                if states.shape[1]<=1:continue
                 embeddings = self.encoder(states[0]).unsqueeze(0)  # (1, block_size+1, n_embd)
                 cur_embedding, next_embedding = embeddings[:, :-1, :], embeddings[:, 1:,:]  # (1, block_size+1, n_embd)
                 # Positional Embedding

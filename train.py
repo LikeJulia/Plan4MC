@@ -62,6 +62,7 @@ if __name__ == '__main__':
     parser.add_argument('--dis', type=int, default=4)
     parser.add_argument('--expseed', type=int, default=0)
     parser.add_argument('--only-clip', type=int, default=0)
+    parser.add_argument('--lmbda', type=float, default=0.1)
     args = parser.parse_args()
     #print(args)
     

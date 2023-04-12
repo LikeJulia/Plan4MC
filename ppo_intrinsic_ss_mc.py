@@ -76,7 +76,10 @@ class PPOBuffer:
             k_step_rtn.append(coeff @ scope)
         return np.array(k_step_rtn)
 
-    def finish_path(self, rew, last_val=0):
+    def finish_path(self, rew, last_val=0,lmbda=0.1):
+        # rew:last reward of one trajectory (gamma=1 return)
+        # last_val: v(s_last)
+        # lmbda: GAE 
         """
         Call this at the end of a trajectory, or when one gets cut off
         by an epoch ending. This looks back in the buffer to where the
@@ -102,7 +105,7 @@ class PPOBuffer:
         self.adv_buf[path_slice] = rews[:-1] + rew[-1]  # 加上最后一个sparse reward(gamma=1下的return)        #utils.discount_cumsum(deltas, self.gamma * self.lam)
 
         # the next line computes rewards-to-go, to be targets for the value function
-        self.ret_buf[path_slice] = utils.discount_cumsum(rews, self.gamma)[:-1]
+        self.ret_buf[path_slice] = utils.discount_cumsum(rews, self.gamma*lmbda)[:-1]
 
         self.path_start_idx = self.ptr
 
@@ -703,7 +706,7 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
                 else:
                     v = 0
 
-                buf.finish_path(ep_rewards, v)
+                buf.finish_path(ep_rewards, v,args.lmbda)
 
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
