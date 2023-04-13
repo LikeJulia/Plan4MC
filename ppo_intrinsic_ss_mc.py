@@ -558,33 +558,6 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
 
     for epoch in range((n != 0) * (n + 1), n + epochs):
 
-        # save a video of test
-        def test_video(epoch, task_success):
-            pth = os.path.join(save_path, 'episode{}_success{}.gif'.format(epoch,int(task_success)))
-            # if not os.path.exists(pth):
-            #    os.mkdir(pth)
-            mine_agent.eval()  # in eval mode, the actor is also stochastic now
-            obs = env.reset()
-            gameover = False
-            # i = 0
-            img_list = []
-            while True:
-                img_list.append(np.transpose(obs['rgb'], [1, 2, 0]).astype(np.uint8))
-                if gameover:
-                    break
-                if args.agent_model == 'mineagent':
-                    batch = preprocess_obs(obs, device)
-                else:
-                    batch = torch_normalize(np.asarray(obs['rgb'], dtype=np.int)).view(1, *obs_dim)
-                    batch = torch.as_tensor(batch, dtype=torch.float32).to(device)
-                act = mine_agent(batch).act
-                act = transform_action(act)
-                obs, r, gameover, _ = env.step(act)
-                # i += 1
-            imageio.mimsave(pth, img_list, duration=0.1)
-            # env.reset()
-            # mine_agent.train()
-
         # Save model and test
 
         
@@ -598,6 +571,7 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
         # else:
             ep_obs = torch.Tensor(np.asarray(o['rgb'], dtype=np.int).copy()).view(1, 1, *env.observation_size)
         rgb_list = []
+        episode_in_epoch_cnt = 0
 
         # rollout in the environment
         mine_agent.train()  # train mode to sample stochastic actions
@@ -683,11 +657,14 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
                     else:
                         obs_ = buf.obs_buf[buf.path_start_idx: buf.ptr].copy()
                     act_ = buf.act_buf[buf.path_start_idx: buf.ptr].copy()
-                    rgb_list = np.asarray(rgb_list)
+                    if args.save_raw_rgb:
+                        rgb_list.append(np.asarray(o['rgb'], dtype=np.uint8))
+                        rgb_list = np.asarray(rgb_list)
                     imitation_buf.eval_and_store(obs_, act_, ep_ret_ss, int(ep_success), rgb_list, None)
 
-                    if (epoch % save_freq == 0) or (epoch == epochs - 1):
-                        test_video(epoch, ep_success)
+                    if ((epoch % save_freq == 0) or (epoch == epochs - 1)) and episode_in_epoch_cnt == 0 and args.save_raw_rgb:
+                        pth = os.path.join(args.save_path, 'epoch{}_ss{}_success{}.gif'.format(epoch, int(ep_ret_ss), int(ep_success)))
+                        imageio.mimsave(pth, [np.transpose(i_, [1,2,0]) for i_ in rgb_list], duration=0.1)
                         # logger.save_state({'env': env}, None)
                         if (epoch % save_freq*50 == 0):
                             torch.save(mine_agent.state_dict(), os.path.join(save_path, 'model_{}.pth'.format(epoch)))
@@ -725,10 +702,12 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
                     # clip_reward_model.reset() # don't forget to reset the clip images buffer
                 # clip_reward_model.update_obs(o['rgb_emb']) # preprocess the images embedding
                 rgb_list = []
+                episode_in_epoch_cnt += 1
 
 
         # Perform PPO update!
         update()
+        episode_in_epoch_cnt = 0
 
         # Perform self-imitation
         if imitation_buf.cur_size >= 1 and (epoch % args.imitate_freq == 0) and epoch > 0:
