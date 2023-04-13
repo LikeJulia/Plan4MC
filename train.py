@@ -51,7 +51,7 @@ if __name__ == '__main__':
     parser.add_argument('--add-ss-in-imitation', type=int, default=0)
     
     # arguments for other research works
-    parser.add_argument('--save-raw-rgb', type=int, default=0) # save embeddings or rgb for Bohan's work?
+    parser.add_argument('--save-raw-rgb', type=int, default=1) # save embeddings or rgb for Bohan's work?
     parser.add_argument('--use-ss-reward', type=int, default=1) # experiment for pretrained SS-transformer
     parser.add_argument('--ss-k', type=int, default=10) # prediction horizon for SS transformer
     parser.add_argument('--ss_model_path', type=str, required=True) # pretrained SS model path

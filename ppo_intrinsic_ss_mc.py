@@ -666,7 +666,7 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
                         pth = os.path.join(args.save_path, 'epoch{}_ss{:.2f}_success{}.gif'.format(epoch, float(ep_ret_ss), int(ep_success)))
                         imageio.mimsave(pth, [np.transpose(i_, [1,2,0]) for i_ in rgb_list], duration=0.1)
                         # logger.save_state({'env': env}, None)
-                        if (epoch % save_freq*50 == 0):
+                        if (epoch % (save_freq*50) == 0):
                             torch.save(mine_agent.state_dict(), os.path.join(save_path, 'model_{}.pth'.format(epoch)))
 
 
