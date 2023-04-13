@@ -663,7 +663,7 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
                     imitation_buf.eval_and_store(obs_, act_, ep_ret_ss, int(ep_success), rgb_list, None)
 
                     if ((epoch % save_freq == 0) or (epoch == epochs - 1)) and episode_in_epoch_cnt == 0 and args.save_raw_rgb:
-                        pth = os.path.join(args.save_path, 'epoch{}_ss{}_success{}.gif'.format(epoch, float(ep_ret_ss), int(ep_success)))
+                        pth = os.path.join(args.save_path, 'epoch{}_ss{:.2f}_success{}.gif'.format(epoch, float(ep_ret_ss), int(ep_success)))
                         imageio.mimsave(pth, [np.transpose(i_, [1,2,0]) for i_ in rgb_list], duration=0.1)
                         # logger.save_state({'env': env}, None)
                         if (epoch % save_freq*50 == 0):
