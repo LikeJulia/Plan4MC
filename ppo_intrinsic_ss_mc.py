@@ -366,6 +366,7 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
         seed=seed,
         dense_reward=bool(args.use_dense),
         dis=args.dis,
+        biome=args.biome,
     )
     obs_dim = env.observation_size
     env_act_dim = env.action_size
@@ -688,7 +689,8 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
                     if (epoch % save_freq == 0) or (epoch == epochs - 1):
                         test_video(epoch, ep_success)
                         # logger.save_state({'env': env}, None)
-                        torch.save(mine_agent.state_dict(), os.path.join(save_path, 'model_{}.pth'.format(epoch)))
+                        if (epoch % save_freq*50 == 0):
+                            torch.save(mine_agent.state_dict(), os.path.join(save_path, 'model_{}.pth'.format(epoch)))
 
 
                 if epoch_ended and not (terminal):

@@ -14,13 +14,13 @@ if __name__ == '__main__':
     parser.add_argument('--seed', '-s', type=int, default=7) # random seed for both np, torch and env
     parser.add_argument('--cpu', type=int, default=1) # number of workers
     parser.add_argument('--gpu', default='0') # -1 if use cpu, otherwise select the gpu id
-    parser.add_argument('--steps', type=int, default=2000) # sample steps per epoch (buffer size * workers)
-    parser.add_argument('--epochs', type=int, default=3000) # epoch number
+    parser.add_argument('--steps', type=int, default=1000) # sample steps per epoch (buffer size * workers)
+    parser.add_argument('--epochs', type=int, default=1000) # epoch number
     parser.add_argument('--save-path', type=str, default='checkpoint') # model save path
     parser.add_argument('--exp-name', type=str, default='ppo') # log name
     #parser.add_argument('--mode', type=str, default='DIRECT') # GUI if use real time render
     parser.add_argument('--task', type=str,required=True) # task_id
-    parser.add_argument('--horizon', type=int, default=500) # task horizon. 500 in the current released code
+    parser.add_argument('--horizon', type=int, default=200) # task horizon. 500 in the current released code
 
     # CLIP model and agent model config
     parser.add_argument('--clip-config-path', type=str, default='mineclip_official/config.yml')
@@ -63,6 +63,7 @@ if __name__ == '__main__':
     parser.add_argument('--expseed', type=int, default=0)
     parser.add_argument('--only-clip', type=int, default=0)
     parser.add_argument('--lmbda', type=float, default=0.9)
+    parser.add_argument('--biome', type=str, default='plains')
     args = parser.parse_args()
     #print(args)
     
