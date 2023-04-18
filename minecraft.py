@@ -241,7 +241,7 @@ into your MineDojo package minedojo/tasks/_init__.py line 494, before calling '_
 '''
 from collections import deque
 class MinecraftEnv:
-    def __init__(self, task_id, biome='plains',image_size=(160, 256), max_step=500, clip_model=None, device=None, seed=0,
+    def __init__(self, task_id, biome='plains', image_size=(160, 256), max_step=500, clip_model=None, device=None, seed=0,
         dense_reward=False, target_name='cow',dis=5, ):
         self.observation_size = (3, *image_size)
         self.action_size = 8
@@ -288,10 +288,12 @@ class MinecraftEnv:
         self.base_env.close()
         if not self.dense_reward:
             self.base_env = minedojo.make(task_id=self.task_id, image_size=self.image_size, seed=self.seed, 
-            initial_mob_spawn_range_low=[-self.dis,1,-self.dis], initial_mob_spawn_range_high=[self.dis,1,self.dis])
+            initial_mob_spawn_range_low=[-self.dis,1,-self.dis], initial_mob_spawn_range_high=[self.dis,1,self.dis],
+            specified_biome=self.biome,)
         else:
             self.base_env = minedojo.make(task_id=self.task_id, image_size=self.image_size, seed=self.seed, 
             initial_mob_spawn_range_low=[-self.dis,1,-self.dis], initial_mob_spawn_range_high=[self.dis,1,self.dis],
+            specified_biome=self.biome,
                 use_lidar=True, lidar_rays=[
                 (np.pi * pitch / 180, np.pi * yaw / 180, 999)
                 for pitch in np.arange(-30, 30, 6)
