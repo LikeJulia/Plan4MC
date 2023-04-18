@@ -21,6 +21,7 @@ from mineagent import features, SimpleFeatureFusion, MineAgent, MultiCategorical
 import copy
 import pickle
 from SSmodelTDR4MC import *
+from minedojo.sim import InventoryItem
 
 
 # PPO buffer, but the observation is stored with Batch
@@ -556,6 +557,10 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
     ss_reward_model = SSTransformer(Config()).to(device)
     ss_reward_model.load_state_dict(torch.load(args.ss_model_path))
 
+    task_need_shears = ["harvest_1_tallgrass", 
+                        "harvest_1_leaves",
+        ]
+
     for epoch in range((n != 0) * (n + 1), n + epochs):
 
         # Save model and test
@@ -573,8 +578,13 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
         rgb_list = []
         episode_in_epoch_cnt = 0
 
+        if args.task in task_need_shears: 
+            print("initialize the task {} with a shears".format(args.task))
+            env.base_env.set_inventory([InventoryItem(slot="mainhand", name="shears", quantity=1)])
+            
         # rollout in the environment
         mine_agent.train()  # train mode to sample stochastic actions
+
         for t in range(steps_per_epoch):
             if args.save_raw_rgb:
                 rgb_list.append(np.asarray(o['rgb'], dtype=np.uint8))
@@ -692,7 +702,14 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
                     logger.store(EpRet=ep_ret, EpLen=ep_len, EpRetSS=ep_ret_ss, EpSuccess=ep_success,
                                  EpRetDense=ep_ret_dense)
 
+                            
+
                 o, ep_ret, ep_len = env.reset(), 0, 0
+                env.base_env.clear_inventory()
+
+                if args.task in task_need_shears: 
+                    env.base_env.set_inventory([InventoryItem(slot="mainhand", name="shears", quantity=1)])
+                
                 ep_ret_ss, ep_success, ep_ret_dense = 0, 0, 0
                 ep_rewards = []
                 if args.agent_model == 'mineagent':
@@ -753,7 +770,10 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
         logger.dump_tabular()
 
         # to avoid destroying too many blocks, remake the environment
-        if (epoch % 50 == 0) and epoch > 0:
+
+        if args.task in task_need_shears and (epoch % 10 == 0) and epoch>0:
+            env.remake_env()
+        elif (epoch % 50 == 0) and epoch > 0:
             env.remake_env()
             # save the imitation learning buffer
             # pth = os.path.join(save_path, 'buffer_{}.pth'.format(epoch))
