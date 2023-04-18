@@ -453,6 +453,7 @@ class SSTransformer(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        self.initialized = False
         self.config = config
         # input embedding
         self.encoder = MCCNN(3, config.n_embd)
@@ -569,17 +570,19 @@ class SSTransformer(nn.Module):
         self.optimizer.step()
         return L2_loss.item(), G_loss.item(), D_loss.item(), tdr_loss.item(), loss.item()
 
-    def trainss(self):
+    def trainss(self, src_root_list):
+        if not self.initialized:
+            for src_root in src_root_list:
+                gif2pkl(src_root)
+            self.initialized = True
 
-        # gif2pkl(src_root)
-
-        save_dir = f'ssmodel-exp/{args.task}_TDR/'
+        # 训练
+        save_dir = f'ssmodel-exp/{task}_TDR/'
         exp_logger = Logger(save_dir, f'trainss.csv',
                             fieldnames=['update', 'Total_loss', 'L2_loss', 'G_loss', 'D_loss', 'TDR_loss'])
         self.train()  # 测试时model.eval()关闭dropout和batchnorm
         num = 0
         for i_epoch in range(self.config.n_epoch):
-            print(f'Epoch {i_epoch}')
             for each in glob(os.path.join(src_root,'*success1.pkl')):
                 states = pickle.load(open(each,'rb'))
                 for i in range(4):
@@ -599,7 +602,30 @@ class SSTransformer(nn.Module):
         torch.save(self.state_dict(), f'{save_dir}/{num}.pth')
         print()
 
-
+    def test_TDR(self):
+        avg_dis = []
+        self.eval()
+        for i_data, d in enumerate(src, 1):
+            states = pickle.load(open(os.path.join('../expert\Breakout\clipped', d), 'rb'))['states']
+            step = torch.arange(0, states.shape[0] - self.config.block_size - 1, self.config.block_size).long().view(-1,1,1)  # (config.batch_size,1,1)
+            batch = torch.Tensor(states[np.array([list(range(id, id + self.config.block_size + 1)) for id in
+                                                  step])]) / 255.0  # (config.batch_size, config.block_size+1, 4, 84, 84)
+            step, batch = step.to(device), batch.to(device)
+            batch_size, block_size, c, w, h = batch.shape
+            embeddings = self.encoder(batch.view(-1, c, w, h)).view(batch_size, block_size,
+                                                                    self.config.n_embd)  # 先展平再reshape回
+            input_embedding = embeddings[:, :-1, :]
+            # time-distance
+            idx1 = np.arange(self.config.block_size)
+            idx2 = np.random.permutation(self.config.block_size)
+            idx1, idx2 = torch.LongTensor(idx1).to(device), torch.LongTensor(idx2).to(device)
+            time_dis = self.tdr.symlog(idx1, idx2).repeat(batch_size)
+            time_pred = self.tdr(input_embedding[:, idx1, :], input_embedding[:, idx2, :])
+            tdr_loss = F.mse_loss(time_pred, time_dis).item()
+            avg_dis.append(tdr_loss)
+            if i_data % 10 == 0:
+                print('Test: [{}/{}] | dis:{}'.format(i_data, len(src), tdr_loss))
+        print(f'Average distance:{np.mean(avg_dis)}')
 
     def cal_intrinsic_s2e(self, states_ls,device = torch.device('cuda')):
         '''
@@ -613,8 +639,8 @@ class SSTransformer(nn.Module):
             progress_span = torch.Tensor(0).to(device)
             for i in range(0,states_ls.shape[1],self.config.block_size):
                 states = states_ls[:,i:i+self.config.block_size+1,...].to(device)
-                if states.shape[1]<=1:continue
                 embeddings = self.encoder(states[0]).unsqueeze(0)  # (1, block_size+1, n_embd)
+                if embeddings.shape[1] <= 1: continue
                 cur_embedding, next_embedding = embeddings[:, :-1, :], embeddings[:, 1:,:]  # (1, block_size+1, n_embd)
                 # Positional Embedding
                 block_size = cur_embedding.shape[1]
@@ -648,65 +674,40 @@ def setseed(seed):
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
 
-
-def show(img, winname='atari'):
-    cv2.namedWindow(winname, 0)
-    cv2.resizeWindow(winname, 600, 600)
-    cv2.imshow(winname, img)
-    cv2.waitKey(0)
-
-
-def checkdata(imgs, s2e=None, winname='MC'):
-    imgs = (imgs.transpose(0, 2, 3, 1)).astype(np.uint8)
-    cv2.namedWindow(winname, 0)
-    cv2.resizeWindow(winname, 600, 600)
-    if s2e is None:
-        s2e = (0,imgs.shape[0])
-    for i in range(*s2e):
-        cv2.imshow(winname,imgs[i])
-        if cv2.waitKey(10) & 0xFF == ord('q'):
-            break
-
 def gif2pkl(dataset_path):
-    src = glob(os.path.join(dataset_path,'*success1.gif'))
-    for i,gif_path in enumerate(src,1):
-        # 获取GIF图片的文件名（不包括扩展名）
+    src = glob(os.path.join(dataset_path, '*success1.gif'))
+    for i, gif_path in enumerate(src, 1):
         gif_name = os.path.splitext(os.path.basename(gif_path))[0]
-        # 从GIF图片中抽取所有帧
         frames = []
-        gif = cv2.VideoCapture(gif_path) 
+        gif = cv2.VideoCapture(gif_path)
         while True:
             ret, frame = gif.read()
-        # for j,frame in enumerate(ImageSequence.Iterator(Image.open(gif_path))):
-            # if j==0:continue
-            # np_frame = np.array(frame)#.transpose(1, 2, 0)
             if not ret: break
             frames.append(frame)
-        frames = np.array(frames,np.uint8).transpose(0, 3, 1, 2)
-        # 将所有帧保存成pickle文件
-        pkl_path = os.path.join(dataset_path,f'{gif_name}.pkl')
+        frames = np.array(frames, np.uint8).transpose(0, 3, 1, 2)
+        pkl_path = os.path.join(dataset_path, f'{gif_name}.pkl')
         with open(pkl_path, 'wb') as f:
             pickle.dump(frames, f)
-        if i%10 == 0:
+        if i % 10 == 0:
             print(f'{i}/{len(src)}')
 
 if __name__ == '__main__':
-    
+    task = 'grass'
+    src_root = ["/home/like/minecraft_ppo/checkpoint/2-base-harvest_1_tallgrass-seed7/gif/",
+                "/home/like/minecraft_ppo/checkpoint/base-harvest_1_tallgrass-seed7/gif"]
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--task', type=str, required=True)
     parser.add_argument('--seed', type=int, default=666)
-    parser.add_argument('--src_root', type=str, required=True)
     parser.add_argument('--block_size', type=int, default=200)
     args = parser.parse_args()
     seed = args.seed
     setseed(seed)
     config = Config(block_size=args.block_size)
-    # 数据
-    src_root = args.src_root
+
     # 模型
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     ssmodel = SSTransformer(config).to(device)
-    # ssmodel.load('ssmodel-exp/Breakout_expert_TDR_atariCNN_seed666/13600.pth')
+    
     # 训练以及测试
-    ssmodel.trainss()
+    ssmodel.trainss(src_root)
     # ssmodel.test_TDR()
