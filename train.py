@@ -14,13 +14,13 @@ if __name__ == '__main__':
     parser.add_argument('--seed', '-s', type=int, default=7) # random seed for both np, torch and env
     parser.add_argument('--cpu', type=int, default=1) # number of workers
     parser.add_argument('--gpu', default='0') # -1 if use cpu, otherwise select the gpu id
-    parser.add_argument('--steps', type=int, default=1000) # sample steps per epoch (buffer size * workers)
+    parser.add_argument('--steps', type=int, required=True) # sample steps per epoch (buffer size * workers)
     parser.add_argument('--epochs', type=int, default=1000) # epoch number
     parser.add_argument('--save-path', type=str, default='checkpoint') # model save path
     parser.add_argument('--exp-name', type=str, default='ppo') # log name
     #parser.add_argument('--mode', type=str, default='DIRECT') # GUI if use real time render
     parser.add_argument('--task', type=str,required=True) # task_id
-    parser.add_argument('--horizon', type=int, default=200) # task horizon. 500 in the current released code
+    parser.add_argument('--horizon', type=int, required=True) # task horizon. 500 in the current released code
 
     # CLIP model and agent model config
     parser.add_argument('--clip-config-path', type=str, default='mineclip_official/config.yml')
@@ -29,7 +29,7 @@ if __name__ == '__main__':
     parser.add_argument('--agent-config-path', type=str, default='mineagent/conf.yaml') # for mineagent
 
     # reward weights
-    parser.add_argument('--reward-success', type=float, default=100.)
+    parser.add_argument('--reward-success', type=float, default=200.)
     parser.add_argument('--reward-clip', type=float, default=1.)
     parser.add_argument('--ss_coff', type=float, default=-1.0)
     parser.add_argument('--clip-reward-mode', type=str, default='direct') # how to compute clip reward
@@ -58,17 +58,19 @@ if __name__ == '__main__':
     
     parser.add_argument('--continue-n', type=int, default=0)
     parser.add_argument('--env_reward', type=int, default=0)
-    parser.add_argument('--intri_type', type=str, default='ds')
+    parser.add_argument('--intri_type', type=str, default='')
     parser.add_argument('--dis', type=int, default=4)
     parser.add_argument('--expseed', type=int, default=0)
     parser.add_argument('--only-clip', type=int, default=0)
-    parser.add_argument('--lmbda', type=float, default=0.9)
+    parser.add_argument('--lmbda', type=float, default=0.8)
     parser.add_argument('--biome', type=str, default='plains')
+    parser.add_argument('--stg', type=int, required=True)
+
     args = parser.parse_args()
     #print(args)
     
     
-    task_abbr = [each for each in ['milk','wool','leaves'] if each in args.task][0]
+    task_abbr = [each for each in ['milk','wool','leaves', 'tallgrass','double_plant'] if each in args.task][0]
     args.exp_name = f"{args.exp_name}_{task_abbr}_{'' if not args.env_reward else 're'}{args.ss_coff}{args.intri_type}_lbmda{args.lmbda}_seed{args.expseed}"
     if not os.path.exists(args.save_path): os.mkdir(args.save_path)
     args.save_path = os.path.join(args.save_path, args.exp_name)
@@ -85,14 +87,7 @@ if __name__ == '__main__':
 
     if not args.use_ss_reward:
         if args.both:
-            from ppo_intrinsic_ss_mc import ppo_selfimitate_ss
-            print('Training ppo_selfimitate_clip_ss.')
-            ppo_selfimitate_ss(args,
-                gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
-                seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-                logger_kwargs=logger_kwargs, device=device, 
-                clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,
-                agent_config_path=args.agent_config_path)
+            pass
         elif args.cpu <= 1:
             from ppo_selfimitate_sparse import ppo_selfimitate_sparse
             print('Training ppo_selfimitate_sparse.')
@@ -114,15 +109,27 @@ if __name__ == '__main__':
 
     else:
         if args.cpu <= 1:
-            # from ppo_selfimitate_ss_ import ppo_selfimitate_ss
-            from ppo_intrinsic_ss_mc import ppo_selfimitate_ss
-            print('Training ppo_selfimitate_SS.')
-            ppo_selfimitate_ss(args,
-                gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
-                seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-                logger_kwargs=logger_kwargs, device=device, 
-                clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,  # mineclip_official/config.yml和adjust.pth
-                agent_config_path=args.agent_config_path,n=args.continue_n)  # mineagent/conf.yaml
+            if args.stg:
+                # from ppo_selfimitate_ss_ import ppo_selfimitate_ss
+                from ppo_intrinsic_ss_mc import ppo_selfimitate_ss
+                print('STG: Training ppo_selfimitate_SS.')
+                ppo_selfimitate_ss(args,
+                    gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
+                    seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
+                    logger_kwargs=logger_kwargs, device=device, 
+                    clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,  # mineclip_official/config.yml和adjust.pth
+                    agent_config_path=args.agent_config_path,n=args.continue_n)  # mineagent/conf.yaml
+            else:
+                # from ppo_selfimitate_ss_ import ppo_selfimitate_ss
+                from ppo_intrinsic_ss_lk import ppo_selfimitate_clip_lk
+                print('LK: Training ppo_selfimitate_SS.')
+                ppo_selfimitate_clip_lk(args,
+                    gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
+                    seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
+                    logger_kwargs=logger_kwargs, device=device, 
+                    clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,  # mineclip_official/config.yml和adjust.pth
+                    agent_config_path=args.agent_config_path)  # mineagent/conf.yaml
+
         else:
             from ppo_selfimitate_ss_mp import ppo_selfimitate_ss_mp
             print('Training multi-process ppo_selfimitate_SS. Workers:', args.cpu)
