@@ -12,54 +12,8 @@ from mineagent.batch import Batch
 import torch
 from mineclip_official import torch_normalize
 from mineagent.features.voxel.flattened_voxel_block import VOXEL_BLOCK_NAME_MAP
+from minedojo.sim import InventoryItem
 
-# def preprocess_obs(obs, device):
-#     """
-#     Here you preprocess the raw env obs to pass to the agent.
-#     Preprocessing includes, for example, use MineCLIP to extract image feature and prompt feature,
-#     flatten and embed voxel names, mask unused obs, etc.
-
-#     Here we just use random vectors for demo purpose.
-#     """
-#     B = 1
-
-#     def cvt_voxels(vox):
-#         ret = np.zeros(3*3*3, dtype=np.long)
-#         for i, v in enumerate(vox.reshape(3*3*3)):
-#             if v in VOXEL_BLOCK_NAME_MAP:
-#                 ret[i] = VOXEL_BLOCK_NAME_MAP[v]
-#         return ret
-
-#     # I consider the move and functional action only, because the camera space is too large?
-#     # construct a 3*3*4*3 action embedding
-#     def cvt_action(act):
-#         if act[5]<=1:
-#             return act[0] + 3*act[1] + 9*act[2] + 36*act[5]
-#         elif act[5]==3:
-#             return act[0] + 3*act[1] + 9*act[2] + 72
-#         else:
-#             raise Exception('Action[5] should be 0,1,3')
-
-#     obs_ = {
-#         "compass": torch.as_tensor(np.array([np.concatenate([obs["location_stats"]["yaw"], obs["location_stats"]["pitch"]])]), 
-#             device=device),
-#         "gps": torch.as_tensor(np.array([obs["location_stats"]["pos"]]), device=device),
-#         "voxels": torch.as_tensor(
-#             [cvt_voxels(obs["voxels"]["block_name"])], dtype=torch.long, device=device
-#         ),
-#         "biome_id": torch.tensor(
-#             [int(obs["location_stats"]["biome_id"])], dtype=torch.long, device=device
-#         ),
-#         "prev_action": torch.tensor(
-#             [cvt_action(obs["prev_action"])], dtype=torch.long, device=device
-#         ),
-#         "prompt": torch.as_tensor(obs["rgb_emb"], device=device).view(B, 512), 
-#         # this is actually the image embedding, not prompt embedding (for single task)
-#     }
-#     #print(obs_["prev_action"])
-
-#     #print(Batch(obs=obs_))
-#     return Batch(obs=obs_)
 def preprocess_obs(obs, device):
     """
     Here you preprocess the raw env obs to pass to the agent.
@@ -88,9 +42,8 @@ def preprocess_obs(obs, device):
 
     yaw_ = np.deg2rad(obs["location_stats"]["yaw"])
     pitch_ = np.deg2rad(obs["location_stats"]["pitch"])
-    compass=torch.as_tensor([np.concatenate([np.cos(yaw_), np.sin(yaw_), np.cos(pitch_), np.sin(pitch_)])], device=device)
     obs_ = {
-        "compass": compass,
+        "compass": torch.as_tensor([np.concatenate([np.cos(yaw_), np.sin(yaw_), np.cos(pitch_), np.sin(pitch_)])], device=device),
         "gps": torch.as_tensor([obs["location_stats"]["pos"]], device=device),
         "voxels": torch.as_tensor(
             [cvt_voxels(obs["voxels"]["block_name"])], dtype=torch.long, device=device
@@ -111,6 +64,7 @@ def preprocess_obs(obs, device):
 
     #print(Batch(obs=obs_))
     return Batch(obs=obs_)
+
 
 
 # Map agent action to env action.
@@ -241,13 +195,16 @@ into your MineDojo package minedojo/tasks/_init__.py line 494, before calling '_
 '''
 from collections import deque
 class MinecraftEnv:
-    def __init__(self, task_id, biome='plains', image_size=(160, 256), max_step=500, clip_model=None, device=None, seed=0,
-        dense_reward=False, target_name='cow',dis=5, ):
+
+    def __init__(self, task_id, image_size=(160, 256), max_step=500, clip_model=None, device=None, seed=0,
+        dense_reward=False, target_name='cow',  biome=None, dis=5, ):
         self.observation_size = (3, *image_size)
         self.action_size = 8
         self.dense_reward = dense_reward
         self.dis = dis
         self.biome = biome
+        self.init_inv = [InventoryItem(slot=0, name="diamond_sword")]
+
         if not dense_reward:
             self.base_env = minedojo.make(task_id=task_id, image_size=image_size, seed=seed, 
             initial_mob_spawn_range_low=[-self.dis,1,-self.dis], initial_mob_spawn_range_high=[self.dis,1,self.dis], 
@@ -255,13 +212,15 @@ class MinecraftEnv:
         else:
             self.base_env = minedojo.make(task_id=task_id, image_size=image_size, seed=seed, 
                 initial_mob_spawn_range_low=[-self.dis,1,-self.dis], initial_mob_spawn_range_high=[self.dis,1,self.dis], 
-                use_lidar=True, 
-                lidar_rays=[(np.pi * pitch / 180, np.pi * yaw / 180, 999)for pitch in np.arange(-30, 30, 6)for yaw in np.arange(-60, 60, 10)],
-                specified_biome=self.biome, 
-                )
+                initial_inventory=self.init_inv,
+                use_lidar=True, lidar_rays=[
+                (np.pi * pitch / 180, np.pi * yaw / 180, 50)
+                    for pitch in np.arange(-30, 30, 6)
+                    for yaw in np.arange(-45, 45, 9)])
             self._target_name = target_name
             self._consecutive_distances = deque(maxlen=2)
             self._distance_min = np.inf
+            self._weapon_durability_deque = deque(maxlen=2)
         self.max_step = max_step
         self.cur_step = 0
         self.task_prompt = self.base_env.task_prompt
@@ -271,6 +230,7 @@ class MinecraftEnv:
         self.task_id = task_id
         self.image_size = image_size
 
+        self._first_use_weapon_durability_deque = True
         self._first_reset = True
         self._reset_cmds = ["/kill @e[type=!player]", "/clear", "/kill @e[type=item]"]
 
@@ -294,10 +254,11 @@ class MinecraftEnv:
             self.base_env = minedojo.make(task_id=self.task_id, image_size=self.image_size, seed=self.seed, 
             initial_mob_spawn_range_low=[-self.dis,1,-self.dis], initial_mob_spawn_range_high=[self.dis,1,self.dis],
             specified_biome=self.biome,
+            initial_inventory=self.init_inv,
                 use_lidar=True, lidar_rays=[
-                (np.pi * pitch / 180, np.pi * yaw / 180, 999)
-                for pitch in np.arange(-30, 30, 6)
-                for yaw in np.arange(-60, 60, 10)])
+                (np.pi * pitch / 180, np.pi * yaw / 180, 50)
+                    for pitch in np.arange(-30, 30, 6)
+                    for yaw in np.arange(-45, 45, 9)])
             #self._target_name = target_name
             self._consecutive_distances = deque(maxlen=2)
             self._distance_min = np.inf
@@ -327,13 +288,9 @@ class MinecraftEnv:
 
         if self.dense_reward:
             self._consecutive_distances.clear()
-            self._distance_min = np.inf
-            entity_in_sight, distance = self._find_distance_to_entity_if_in_sight(obs)
-            if entity_in_sight:
-                distance = self._distance_min = min(distance, self._distance_min)
-                self._consecutive_distances.append(distance)
-            else:
-                self._consecutive_distances.append(0)
+            self._weapon_durability_deque.clear()  # updated 11.29
+            self._first_use_weapon_durability_deque = True  # updated 11.29
+
 
         return obs
 
@@ -354,131 +311,55 @@ class MinecraftEnv:
         self.prev_action = act # save the previous action for the agent's observation
 
         if self.dense_reward:
-            entity_in_sight, distance = self._find_distance_to_entity_if_in_sight(obs)
-            nav_reward = 0
-            if entity_in_sight:
-                distance = self._distance_min = min(distance, self._distance_min)
-                self._consecutive_distances.append(distance)
-                nav_reward = self._consecutive_distances[0] - self._consecutive_distances[1]
-                #print('dense:', nav_reward, self._consecutive_distances[1])
-            nav_reward = max(0, nav_reward)
-            obs['dense_reward'] = nav_reward
+            valid_attack = 0
+            if (self._first_use_weapon_durability_deque == True):
+                self._first_use_weapon_durability_deque = False
+                self._weapon_durability_deque.append(obs["inventory"]["cur_durability"][0])
+                self._weapon_durability_deque.append(obs["inventory"]["cur_durability"][0])
+                valid_attack = (
+                        self._weapon_durability_deque[0] - self._weapon_durability_deque[1]
+                )
+
+
+                valid_attack = 1.0 if valid_attack == 1.0 else 0.0
+            else:
+                # self._weapon_durability_deque.pop()    # In Python, elements in the deque move forward in turn when a new element appended
+                self._weapon_durability_deque.append(obs["inventory"]["cur_durability"][0])
+                valid_attack = (
+                        self._weapon_durability_deque[0] - self._weapon_durability_deque[1]
+                )
+                # when dying, the weapon is gone and durability changes to 0
+                valid_attack = 1.0 if valid_attack == 1.0 else 0.0
+
+            if (valid_attack == 1.0):
+                for i in range(obs["rays"]["ray_yaw"].size):
+                    if obs["rays"]["ray_yaw"][i] == 0 and obs["rays"]["ray_pitch"][i] == 0 and \
+                            obs["rays"]["entity_name"][i] == self._target_name:
+                        reward = 1.0
+                        done = True
+                        print("attack!")
+                        break
+                    
 
         return  obs, reward, done, info
 
-    # for dense reward, find the nearest target in sight
-    def _find_distance_to_entity_if_in_sight(self, obs):
-        assert self.dense_reward is True
-        in_sight, min_distance = False, None
-        entities, distances = (
-            obs["rays"]["entity_name"],
-            obs["rays"]["entity_distance"],
-        )
-        entity_idx = np.where(entities == self._target_name)[0]
-        if len(entity_idx) > 0:
-            in_sight = True
-            min_distance = np.min(distances[entity_idx])
-        return in_sight, min_distance
 
 
-
-# import habitat
-# '''
-# Oct 29
-# env for multi-process
-# 1. the init function receives a single args
-# 2. not contain CLIP model
-# 3. specially: auto reset an env if done, because all the envs are stepped simultaneously
-# '''
-# class MinecraftEnvMP(habitat.RLEnv):
-
-#     # def __init__(self, task_id, image_size=(160, 256), max_step=500, clip_model=None, device=None, seed=0,
-#     #              dense_reward=False, target_name='cow'):
-#     def __init__(self, args):
-#         self.args = args
-#         self.observation_size = (3, *args.image_size)
-#         self.action_size = 8
-#         #self.dense_reward = bool(args.use_dense)
-#         self._env = minedojo.make(task_id=args.task_id, image_size=args.image_size, seed=args.seed_env)
-
-#         self.max_step = args.horizon
-#         self.cur_step = 0
-#         self.task_prompt = self._env.task_prompt
-#         #self.clip_model = None  # use mineclip model to precompute embeddings
-#         #self.device = args.device
-#         self.seed_env = args.seed_env
-#         self.task_id = args.task_id
-#         self.image_size = args.image_size
-#         #self.number_of_episodes = 10000
-#         self._first_reset = True
-#         self._reset_cmds = ["/kill @e[type=!player]",
-#                             "/clear", "/kill @e[type=item]"]
-
-#         self.number_of_episodes = 10000
-
-#     def __del__(self):
-#         if hasattr(self, '_env'):
-#             self._env.close()
-
-#     # auto reset after remake
-#     def remake(self):
-#         '''
-#         call this to reset all the blocks and trees
-#         should modify line 479 in minedojo/tasks/__init__.py, deep copy the task spec dict:
-#             import deepcopy
-#             task_specs = copy.deepcopy(ALL_TASKS_SPECS[task_id])
-#         '''
-#         self._env.close()
-#         self._env = minedojo.make(task_id=self.task_id, image_size=self.image_size, seed=self.seed_env)
-    
-#         self._first_reset = True
-#         print('Environment remake: reset all the destroyed blocks!')
-#         return self._env.reset()
-
-#     def reset(self):
-#         if not self._first_reset:
-#             for cmd in self._reset_cmds:
-#                 self._env.unwrapped.execute_cmd(cmd)
-#             self._env.unwrapped.set_time(6000)
-#             self._env.unwrapped.set_weather("clear")
-#         self._first_reset = False
-#         self.prev_action = self._env.action_space.no_op()
-
-#         obs = self._env.reset()
-#         self.cur_step = 0
-
-#         obs['prev_action'] = self.prev_action
-
-#         return obs
-
-#     def step(self, act):
-#         #print(act)
-#         obs, reward, done, info = self._env.step(act['action'])
-#         self.cur_step += 1
-#         if self.cur_step >= self.max_step:
-#             done = True
-
-#         obs['prev_action'] = self.prev_action
-#         self.prev_action = np.asarray(act['action'])  # save the previous action for the agent's observation
-
-#         return obs, reward, done, info
-
-
-# if __name__ == '__main__':
-#     #print(minedojo.ALL_TASKS_SPECS)
-#     env = MinecraftEnv(
-#         task_id="harvest_milk_with_empty_bucket_and_cow",
-#         image_size=(160, 256),
-#     )
-#     reset_cmds = ["/kill @e[type=!player]", "/clear", "/kill @e[type=item]"]
-#     obs = env.reset()
-#     #print(obs.shape, obs.dtype)
-#     for t in range (100):
-#         for i in range(12):
-#             act = [42,0] #cam
-#             obs, reward, done, info = env.step(act)
-#             time.sleep(0.2)
-#         print('reset')
-#         for cmd in reset_cmds:
-#             env.base_env.execute_cmd(cmd)
-#         obs = env.reset()
+if __name__ == '__main__':
+    #print(minedojo.ALL_TASKS_SPECS)
+    env = MinecraftEnv(
+        task_id="harvest_milk_with_empty_bucket_and_cow",
+        image_size=(160, 256),
+    )
+    reset_cmds = ["/kill @e[type=!player]", "/clear", "/kill @e[type=item]"]
+    obs = env.reset()
+    #print(obs.shape, obs.dtype)
+    for t in range (100):
+        for i in range(12):
+            act = [42,0] #cam
+            obs, reward, done, info = env.step(act)
+            time.sleep(0.2)
+        print('reset')
+        for cmd in reset_cmds:
+            env.base_env.execute_cmd(cmd)
+        obs = env.reset()
