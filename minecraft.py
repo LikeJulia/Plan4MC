@@ -12,7 +12,6 @@ from mineagent.batch import Batch
 import torch
 from mineclip_official import torch_normalize
 from mineagent.features.voxel.flattened_voxel_block import VOXEL_BLOCK_NAME_MAP
-from minedojo.sim import InventoryItem
 
 def preprocess_obs(obs, device):
     """
@@ -197,13 +196,12 @@ from collections import deque
 class MinecraftEnv:
 
     def __init__(self, task_id, image_size=(160, 256), max_step=500, clip_model=None, device=None, seed=0,
-        dense_reward=False, target_name='cow',  biome=None, dis=5, ):
+        dense_reward=False, target_name=None,  biome=None, dis=5, ):
         self.observation_size = (3, *image_size)
         self.action_size = 8
         self.dense_reward = dense_reward
         self.dis = dis
         self.biome = biome
-        self.init_inv = [InventoryItem(slot=0, name="diamond_sword")]
 
         if not dense_reward:
             self.base_env = minedojo.make(task_id=task_id, image_size=image_size, seed=seed, 
@@ -212,7 +210,6 @@ class MinecraftEnv:
         else:
             self.base_env = minedojo.make(task_id=task_id, image_size=image_size, seed=seed, 
                 initial_mob_spawn_range_low=[-self.dis,1,-self.dis], initial_mob_spawn_range_high=[self.dis,1,self.dis], 
-                initial_inventory=self.init_inv,
                 use_lidar=True, lidar_rays=[
                 (np.pi * pitch / 180, np.pi * yaw / 180, 50)
                     for pitch in np.arange(-30, 30, 6)
@@ -254,12 +251,11 @@ class MinecraftEnv:
             self.base_env = minedojo.make(task_id=self.task_id, image_size=self.image_size, seed=self.seed, 
             initial_mob_spawn_range_low=[-self.dis,1,-self.dis], initial_mob_spawn_range_high=[self.dis,1,self.dis],
             specified_biome=self.biome,
-            initial_inventory=self.init_inv,
                 use_lidar=True, lidar_rays=[
                 (np.pi * pitch / 180, np.pi * yaw / 180, 50)
                     for pitch in np.arange(-30, 30, 6)
                     for yaw in np.arange(-45, 45, 9)])
-            #self._target_name = target_name
+            self._target_name = self.target_name
             self._consecutive_distances = deque(maxlen=2)
             self._distance_min = np.inf
         self._first_reset = True
@@ -339,27 +335,29 @@ class MinecraftEnv:
                         done = True
                         print("attack!")
                         break
+            # no dense reward       
+            obs['dense_reward'] = 0
                     
 
         return  obs, reward, done, info
 
 
 
-if __name__ == '__main__':
-    #print(minedojo.ALL_TASKS_SPECS)
-    env = MinecraftEnv(
-        task_id="harvest_milk_with_empty_bucket_and_cow",
-        image_size=(160, 256),
-    )
-    reset_cmds = ["/kill @e[type=!player]", "/clear", "/kill @e[type=item]"]
-    obs = env.reset()
-    #print(obs.shape, obs.dtype)
-    for t in range (100):
-        for i in range(12):
-            act = [42,0] #cam
-            obs, reward, done, info = env.step(act)
-            time.sleep(0.2)
-        print('reset')
-        for cmd in reset_cmds:
-            env.base_env.execute_cmd(cmd)
-        obs = env.reset()
+# if __name__ == '__main__':
+#     #print(minedojo.ALL_TASKS_SPECS)
+#     env = MinecraftEnv(
+#         task_id="harvest_milk_with_empty_bucket_and_cow",
+#         image_size=(160, 256),
+#     )
+#     reset_cmds = ["/kill @e[type=!player]", "/clear", "/kill @e[type=item]"]
+#     obs = env.reset()
+#     #print(obs.shape, obs.dtype)
+#     for t in range (100):
+#         for i in range(12):
+#             act = [42,0] #cam
+#             obs, reward, done, info = env.step(act)
+#             time.sleep(0.2)
+#         print('reset')
+#         for cmd in reset_cmds:
+#             env.base_env.execute_cmd(cmd)
+#         obs = env.reset()

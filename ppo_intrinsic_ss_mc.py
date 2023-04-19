@@ -348,6 +348,10 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
     model_clip.eval()
     print('MineCLIP model loaded.')
 
+    if args.task.startswith('combat'):
+        args.target_name = args.task.split("_")[1]
+        print(f"Combat Target: {args.target_name}")
+
     # Instantiate environment
     env = MinecraftEnv(
         task_id=args.task,
@@ -359,6 +363,7 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
         dense_reward=bool(args.use_dense),
         dis=args.dis,
         biome=args.biome,
+        target_name=args.target_name,
     )
     obs_dim = env.observation_size
     env_act_dim = env.action_size
@@ -550,6 +555,11 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
                         "harvest_1_leaves",
                         "harvest_1_double_plant",
         ]
+    
+    task_need_sword = ["combat_cow_plains_diamond_armors_diamond_sword_shield",
+                       "combat_sheep_plains_diamond_armors_diamond_sword_shield",
+                       "combat_pig_plains_diamond_armors_diamond_sword_shield"
+                       ]
 
     for epoch in range((n != 0) * (n + 1), n + epochs):
 
@@ -571,6 +581,9 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
         if args.task in task_need_shears: 
             print("initialize the task {} with a shears".format(args.task))
             env.base_env.set_inventory([InventoryItem(slot="mainhand", name="shears", quantity=1)])
+        if args.task in task_need_sword: 
+            print("initialize the task {} with a diamond sword".format(args.task))
+            env.base_env.set_inventory([InventoryItem(slot="mainhand", name="diamond_sword", quantity=1)])
             
         # rollout in the environment
         mine_agent.train()  # train mode to sample stochastic actions
@@ -660,11 +673,11 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
                     imitation_buf.eval_and_store(obs_, act_, ep_ret_ss, int(ep_success), rgb_list, None)
 
                     # save the gif
-                    if args.save_raw_rgb and ((epoch % save_freq == 0) or (epoch == epochs - 1)) and episode_in_epoch_cnt == 0:
-                        pth = os.path.join(args.save_path, 'epoch{}_ss{:.2f}_success{}.gif'.format(epoch, float(ep_ret_ss), int(ep_success)))
+                    if args.save_raw_rgb and ((epoch % save_freq == 0) or (epoch == epochs - 1)): # and int(ep_success) == 1:
+                        pth = os.path.join(args.save_path, '{}_{}_ss{:.2f}_success{}.gif'.format(epoch, episode_in_epoch_cnt, float(ep_ret_ss), int(ep_success)))
                         imageio.mimsave(pth, [np.transpose(i_, [1,2,0]) for i_ in rgb_list], duration=0.1)
                         # logger.save_state({'env': env}, None)
-                        if (epoch % (save_freq*50) == 0):
+                        if (epoch % 50) == 0:
                             torch.save(mine_agent.state_dict(), os.path.join(save_path, 'model_{}.pth'.format(epoch)))
 
 
@@ -697,6 +710,8 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
 
                 if args.task in task_need_shears: 
                     env.base_env.set_inventory([InventoryItem(slot="mainhand", name="shears", quantity=1)])
+                if args.task in task_need_sword: 
+                    env.base_env.set_inventory([InventoryItem(slot="mainhand", name="diamond_sword", quantity=1)])
                 
                 ep_ret_ss, ep_success, ep_ret_dense = 0, 0, 0
                 ep_rewards = []

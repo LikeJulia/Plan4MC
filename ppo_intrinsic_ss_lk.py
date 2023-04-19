@@ -430,7 +430,10 @@ def ppo_selfimitate_clip_lk(args, seed=0, device=None,
     print('MineCLIP model loaded.')
 
 
-    # Instantiate environment
+    if args.task.startswith('combat'):
+        args.target_name = args.task.split("_")[1]
+        print(f"Combat Target: {args.target_name}")
+
     env = MinecraftEnv(
         task_id=args.task,
         image_size=(160, 256),
@@ -439,7 +442,9 @@ def ppo_selfimitate_clip_lk(args, seed=0, device=None,
         device=device,
         seed=seed,
         dense_reward=bool(args.use_dense),
+        dis=args.dis,
         biome=args.biome,
+        target_name=args.target_name,
     )
 
 
@@ -649,7 +654,10 @@ def ppo_selfimitate_clip_lk(args, seed=0, device=None,
                             "harvest_1_double_plant",
         ]
 
-    task_need_shovel = ["harvest_1_grass"]
+    task_need_sword = ["combat_cow_plains_diamond_armors_diamond_sword_shield",
+                       "combat_sheep_plains_diamond_armors_diamond_sword_shield",
+                       "combat_pig_plains_diamond_armors_diamond_sword_shield"
+                       ]
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
@@ -706,6 +714,9 @@ def ppo_selfimitate_clip_lk(args, seed=0, device=None,
         if args.task in task_need_shears: 
             print("initialize the task {} with a shears".format(args.task))
             env.base_env.set_inventory([InventoryItem(slot="mainhand", name="shears", quantity=1)])
+        if args.task in task_need_sword: 
+            print("initialize the task {} with a diamond sword".format(args.task))
+            env.base_env.set_inventory([InventoryItem(slot="mainhand", name="diamond_sword", quantity=1)])
 
         # rollout in the environment
         mine_agent.train()  # train mode to sample stochastic actions
@@ -793,8 +804,8 @@ def ppo_selfimitate_clip_lk(args, seed=0, device=None,
                     imitation_buf.eval_and_store(obs_, act_, ep_ret_clip, int(ep_success), rgb_list)
 
                     # save the gif
-                    if args.save_raw_rgb and ((epoch % save_freq == 0) or (epoch == epochs - 1)) and int(ep_success) == 1:
-                        pth = os.path.join(args.save_path, '{}_ret{}_success{}.gif'.format(epoch, int(ep_ret), int(ep_success)))
+                    if args.save_raw_rgb and ((epoch % save_freq == 0) or (epoch == epochs - 1)): # and int(ep_success) == 1:
+                        pth = os.path.join(args.save_path, '{}_{}_ret{}_success{}.gif'.format(epoch, episode_in_epoch_cnt, int(ep_ret), int(ep_success)))
                         imageio.mimsave(pth, [np.transpose(i_, [1,2,0]) for i_ in rgb_list], duration=0.1)
 
                 if epoch_ended and not (terminal):
@@ -823,6 +834,8 @@ def ppo_selfimitate_clip_lk(args, seed=0, device=None,
 
                 if args.task in task_need_shears: 
                     env.base_env.set_inventory([InventoryItem(slot="mainhand", name="shears", quantity=1)])
+                if args.task in task_need_sword: 
+                    env.base_env.set_inventory([InventoryItem(slot="mainhand", name="diamond_sword", quantity=1)])
                 
                 ep_ret_clip, ep_success, ep_ret_dense = 0, 0, 0
                 ep_rewards = []
