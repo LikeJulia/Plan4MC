@@ -69,14 +69,6 @@ class PPOBuffer:
         assert self.ptr - self.path_start_idx == len(rews)
         self.rew_buf[self.path_start_idx: self.ptr] = rews
 
-    def k_step_return(self, reward, k=10):
-        k_step_rtn = []
-        for i in range(len(reward)):
-            scope = reward[i:i + k]
-            coeff = self.gamma ** np.arange(len(scope))
-            k_step_rtn.append(coeff @ scope)
-        return np.array(k_step_rtn)
-
     def finish_path(self, rew, last_val=0,lmbda=0.1):
         # rew:last reward of one trajectory (gamma=1 return)
         # last_val: v(s_last)
@@ -559,6 +551,7 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
 
     task_need_shears = ["harvest_1_tallgrass", 
                         "harvest_1_leaves",
+                        "harvest_1_double_plant",
         ]
 
     for epoch in range((n != 0) * (n + 1), n + epochs):
@@ -609,10 +602,7 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
 
             r = r * args.reward_success  # + args.reward_step # + r_clip * args.reward_clip # weighted sum of different rewards
             ep_rewards.append(r)
-            if args.agent_model == 'mineagent':
-                # ep_state_embeddings = torch.cat((ep_state_embeddings, torch.as_tensor(next_o['rgb_emb']).squeeze(0)), 0)
-            # else:
-                ep_obs = torch.cat((ep_obs, torch.Tensor(np.asarray(next_o['rgb'], dtype=np.uint8).copy()).view(1, 1,*env.observation_size)),1)
+            ep_obs = torch.cat((ep_obs, torch.Tensor(np.asarray(next_o['rgb'], dtype=np.uint8).copy()).view(1, 1,*env.observation_size)),1)
 
             # dense reward
             if args.use_dense:
@@ -672,7 +662,8 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
                         rgb_list = np.asarray(rgb_list)
                     imitation_buf.eval_and_store(obs_, act_, ep_ret_ss, int(ep_success), rgb_list, None)
 
-                    if ((epoch % save_freq == 0) or (epoch == epochs - 1)) and episode_in_epoch_cnt == 0 and args.save_raw_rgb:
+                    # save the gif
+                    if args.save_raw_rgb and ((epoch % save_freq == 0) or (epoch == epochs - 1)) and episode_in_epoch_cnt == 0:
                         pth = os.path.join(args.save_path, 'epoch{}_ss{:.2f}_success{}.gif'.format(epoch, float(ep_ret_ss), int(ep_success)))
                         imageio.mimsave(pth, [np.transpose(i_, [1,2,0]) for i_ in rgb_list], duration=0.1)
                         # logger.save_state({'env': env}, None)
@@ -712,11 +703,8 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
                 
                 ep_ret_ss, ep_success, ep_ret_dense = 0, 0, 0
                 ep_rewards = []
-                if args.agent_model == 'mineagent':
-                    # ep_state_embeddings = torch.as_tensor(o['rgb_emb']).squeeze(0)
-                # else:
-                    ep_obs = torch.Tensor(np.asarray(o['rgb'], dtype=np.int).copy()).view(1, 1, *env.observation_size)
-                    # clip_reward_model.reset() # don't forget to reset the clip images buffer
+                ep_obs = torch.Tensor(np.asarray(o['rgb'], dtype=np.int).copy()).view(1, 1, *env.observation_size)
+                # clip_reward_model.reset() # don't forget to reset the clip images buffer
                 # clip_reward_model.update_obs(o['rgb_emb']) # preprocess the images embedding
                 rgb_list = []
                 episode_in_epoch_cnt += 1
