@@ -154,7 +154,7 @@ def main(args):
         if task_success:
             test_success_rate += 1
         # save gif
-        if args.save_gif:
+        if args.save_gif and int(task_success):
             imageio.mimsave(os.path.join(save_dir,'episode{}_success{}.gif'.format(ep,int(task_success))), env.rgb_list, duration=0.1)
         # save snapshots
         save_dir_snapshots = os.path.join(save_dir, 'episode{}_success{}'.format(ep,int(task_success)))
