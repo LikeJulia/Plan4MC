@@ -65,7 +65,7 @@ if __name__ == '__main__':
     parser.add_argument('--lmbda', type=float, default=0.8)
     parser.add_argument('--biome', type=str, default='plains')
     parser.add_argument('--stg', type=int, required=True)
-
+    parser.add_argument('--algo', type=str, default='tdr')
     args = parser.parse_args()
     #print(args)
     
@@ -84,6 +84,15 @@ if __name__ == '__main__':
     else:
         device = torch.device('cuda:{}'.format(args.gpu))
     print('Using device:', device)
+
+    if args.algo in ['TDR','tdr']:
+        from SSmodelTDR4MC import *
+    if args.algo in ['ELE','ele']:
+        from SSmodelELE4MC import *
+    # initialize the SS reward model
+    ss_reward_model = SSTransformer(Config()).to(device)
+    ss_reward_model.load_state_dict(torch.load(args.ss_model_path))
+
 
     if not args.use_ss_reward:
         if args.both:
