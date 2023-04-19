@@ -20,7 +20,6 @@ from mineagent.batch import Batch
 from mineagent import features, SimpleFeatureFusion, MineAgent, MultiCategoricalActor, Critic
 import copy
 import pickle
-from SSmodelTDR4MC import *
 from minedojo.sim import InventoryItem
 
 
@@ -209,7 +208,7 @@ until the buffer is full, then update the actor and the critic for sevaral steps
 '''
 
 
-def ppo_selfimitate_ss(args, seed=0, device=None,
+def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
                        steps_per_epoch=400, epochs=500, gamma=0.99, clip_ratio=0.2, pi_lr=1e-4, vf_lr=1e-4,
                        train_pi_iters=80, train_v_iters=80, lam=0.95, max_ep_len=1000,
                        target_kl=0.01, save_freq=5, logger_kwargs=dict(), save_path='checkpoint',
@@ -318,7 +317,7 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
             the current policy and value function.
 
     """
-
+    
     def compute_all_CNN_embeddings(model, imgs, device):
         video = imgs.to(device)  # (1, N, 3, 160, 256)
         imgs_emb = model(torch.as_tensor(video, dtype=torch.float)).detach()
@@ -545,9 +544,7 @@ def ppo_selfimitate_ss(args, seed=0, device=None,
 
     start_time = time.time()
 
-    # initialize the SS reward model
-    ss_reward_model = SSTransformer(Config()).to(device)
-    ss_reward_model.load_state_dict(torch.load(args.ss_model_path))
+    
 
     task_need_shears = ["harvest_1_tallgrass", 
                         "harvest_1_leaves",
