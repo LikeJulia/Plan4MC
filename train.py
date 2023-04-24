@@ -58,7 +58,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--continue-n', type=int, default=0)
     parser.add_argument('--env_reward', type=int, default=0)
-    parser.add_argument('--intri_type', type=str, default='')
+    parser.add_argument('--intri_type', type=str, required=True)
     parser.add_argument('--dis', type=int, default=4)
     parser.add_argument('--expseed', type=int, default=0)
     parser.add_argument('--only-clip', type=int, default=0)
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     #print(args)
     
     
-    task_abbr = [each for each in ['milk','wool','leaves', 'tallgrass','double_plant'] if each in args.task][0]
+    task_abbr = [each for each in ['milk','wool','leaves', 'tallgrass','double_plant', 'combat_cow', 'combat_sheep', 'combat_pig'] if each in args.task][0]
     args.exp_name = f"{args.exp_name}_{task_abbr}_{'' if not args.env_reward else 're'}{args.ss_coff}{args.intri_type}_lbmda{args.lmbda}_seed{args.expseed}"
     if not os.path.exists(args.save_path): os.mkdir(args.save_path)
     args.save_path = os.path.join(args.save_path, args.exp_name)
@@ -90,61 +90,39 @@ if __name__ == '__main__':
     if args.algo in ['ELE','ele']:
         from SSmodelELE4MC import *
     # initialize the SS reward model
-    ss_reward_model = SSTransformer(Config()).to(device)
-    ss_reward_model.load_state_dict(torch.load(args.ss_model_path))
+    if args.stg:
+        ss_reward_model = SSTransformer(Config()).to(device)
+        ss_reward_model.load_state_dict(torch.load(args.ss_model_path))
 
 
-    if not args.use_ss_reward:
-        if args.both:
-            pass
-        elif args.cpu <= 1:
-            from ppo_selfimitate_sparse import ppo_selfimitate_sparse
-            print('Training ppo_selfimitate_sparse.')
-            ppo_selfimitate_sparse(args,
+    if args.cpu <= 1:
+        if args.stg:
+            # from ppo_selfimitate_ss_ import ppo_selfimitate_ss
+            from ppo_intrinsic_ss_mc import ppo_selfimitate_ss
+            print('STG: Training ppo_selfimitate_SS.')
+            ppo_selfimitate_ss(args, ss_reward_model=ss_reward_model,
                 gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
                 seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
                 logger_kwargs=logger_kwargs, device=device, 
-                clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,
-                agent_config_path=args.agent_config_path)
+                clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,  # mineclip_official/config.yml和adjust.pth
+                agent_config_path=args.agent_config_path,n=args.continue_n)  # mineagent/conf.yaml
         else:
-            from ppo_selfimitate_clip_mp import ppo_selfimitate_clip_mp
-            print('Training multi-process ppo_selfimitate_clip. Workers:', args.cpu)
-            ppo_selfimitate_clip_mp(args,
+            # from ppo_selfimitate_ss_ import ppo_selfimitate_ss
+            from ppo_intrinsic_ss_lk import ppo_selfimitate_clip_lk
+            print('LK: Training ppo_selfimitate_SS.')
+            ppo_selfimitate_clip_lk(args,
                 gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
                 seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
                 logger_kwargs=logger_kwargs, device=device, 
-                clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,
-                agent_config_path=args.agent_config_path)
+                clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,  # mineclip_official/config.yml和adjust.pth
+                agent_config_path=args.agent_config_path)  # mineagent/conf.yaml
 
     else:
-        if args.cpu <= 1:
-            if args.stg:
-                # from ppo_selfimitate_ss_ import ppo_selfimitate_ss
-                from ppo_intrinsic_ss_mc import ppo_selfimitate_ss
-                print('STG: Training ppo_selfimitate_SS.')
-                ppo_selfimitate_ss(args,
-                    gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
-                    seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-                    logger_kwargs=logger_kwargs, device=device, 
-                    clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,  # mineclip_official/config.yml和adjust.pth
-                    agent_config_path=args.agent_config_path,n=args.continue_n)  # mineagent/conf.yaml
-            else:
-                # from ppo_selfimitate_ss_ import ppo_selfimitate_ss
-                from ppo_intrinsic_ss_lk import ppo_selfimitate_clip_lk
-                print('LK: Training ppo_selfimitate_SS.')
-                ppo_selfimitate_clip_lk(args,
-                    gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
-                    seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-                    logger_kwargs=logger_kwargs, device=device, 
-                    clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,  # mineclip_official/config.yml和adjust.pth
-                    agent_config_path=args.agent_config_path)  # mineagent/conf.yaml
-
-        else:
-            from ppo_selfimitate_ss_mp import ppo_selfimitate_ss_mp
-            print('Training multi-process ppo_selfimitate_SS. Workers:', args.cpu)
-            ppo_selfimitate_ss_mp(args,
-                gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
-                seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-                logger_kwargs=logger_kwargs, device=device, 
-                clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,
-                agent_config_path=args.agent_config_path)
+        from ppo_selfimitate_ss_mp import ppo_selfimitate_ss_mp
+        print('Training multi-process ppo_selfimitate_SS. Workers:', args.cpu)
+        ppo_selfimitate_ss_mp(args,
+            gamma=args.gamma, save_path=args.save_path, target_kl=args.target_kl,
+            seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
+            logger_kwargs=logger_kwargs, device=device, 
+            clip_config_path=args.clip_config_path, clip_model_path=args.clip_model_path,
+            agent_config_path=args.agent_config_path)
