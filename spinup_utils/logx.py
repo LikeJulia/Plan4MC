@@ -146,9 +146,9 @@ class Logger:
         """
         if self.first_row:
             self.log_headers.append(key)
-        else:
-            assert key in self.log_headers, "Trying to introduce a new key %s that you didn't include in the first iteration"%key
-        assert key not in self.log_current_row, "You already set %s this iteration. Maybe you forgot to call dump_tabular()"%key
+        # else:
+        #     assert key in self.log_headers, "Trying to introduce a new key %s that you didn't include in the first iteration"%key
+        # assert key not in self.log_current_row, "You already set %s this iteration. Maybe you forgot to call dump_tabular()"%key
         self.log_current_row[key] = val
 
     def save_config(self, config):

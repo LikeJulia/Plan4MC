@@ -570,10 +570,10 @@ class SSTransformer(nn.Module):
         self.optimizer.step()
         return L2_loss.item(), G_loss.item(), D_loss.item(), tdr_loss.item(), loss.item()
 
-    def trainss(self, src_root_list):
+    def trainss(self, src_root_list, threshold):
         if not self.initialized:
             for src_root in src_root_list:
-                gif2pkl(src_root)
+                gif2pkl(src_root, threshold)
             self.initialized = True
 
         # 训练
@@ -584,20 +584,23 @@ class SSTransformer(nn.Module):
         num = 0
         for i_epoch in range(self.config.n_epoch):
             for each in glob(os.path.join(src_root,'*success1.pkl')):
-                states = pickle.load(open(each,'rb'))
-                for i in range(4):
-                    if states.shape[0]<=config.block_size:
-                        batch = torch.Tensor(states/ 255.).unsqueeze(0)
-                    else:
-                        b = states.shape[0] - self.config.block_size
-                        step = torch.randint(b, (min(config.batch_size,b), 1, 1),dtype=torch.long)  # (config.batch_size,1,1)
-                        batch = torch.Tensor(states[np.array([list(range(id, id + self.config.block_size + 1)) for id in step])]) / 255.0  # (config.batch_size, config.block_size+1, 4, 84, 84)
-                    L2_loss, G_loss, D_loss, tdr_loss, tot_loss = ssmodel.update(batch.to(device), None)
-                    exp_logger.update(fieldvalues=[num, tot_loss, L2_loss, G_loss, D_loss, tdr_loss])
-                    num += 1
-                    if num % 5000 == 0: torch.save(self.state_dict(), f'{save_dir}/{num}.pth')
-                    if num % 100 == 0: print(
-                        f'update:{num:05d} | loss:{tot_loss:.6f} | L2_loss:{L2_loss:.6f} | G_loss:{G_loss:.6f} | D_loss:{D_loss:.6f} | TDR_loss:{tdr_loss:.6f}')
+                pkl_name = os.path.splitext(os.path.basename(each))[0]
+                ret_value = int(pkl_name.split('_')[1][3:])
+                if threshold is None or ret_value > threshold:
+                    states = pickle.load(open(each,'rb'))
+                    for i in range(4):
+                        if states.shape[0]<=config.block_size:
+                            batch = torch.Tensor(states/ 255.).unsqueeze(0)
+                        else:
+                            b = states.shape[0] - self.config.block_size
+                            step = torch.randint(b, (min(config.batch_size,b), 1, 1),dtype=torch.long)  # (config.batch_size,1,1)
+                            batch = torch.Tensor(states[np.array([list(range(id, id + self.config.block_size + 1)) for id in step])]) / 255.0  # (config.batch_size, config.block_size+1, 4, 84, 84)
+                        L2_loss, G_loss, D_loss, tdr_loss, tot_loss = ssmodel.update(batch.to(device), None)
+                        exp_logger.update(fieldvalues=[num, tot_loss, L2_loss, G_loss, D_loss, tdr_loss])
+                        num += 1
+                        if num % 5000 == 0: torch.save(self.state_dict(), f'{save_dir}/{num}.pth')
+                        if num % 100 == 0: print(
+                            f'update:{num:05d} | loss:{tot_loss:.6f} | L2_loss:{L2_loss:.6f} | G_loss:{G_loss:.6f} | D_loss:{D_loss:.6f} | TDR_loss:{tdr_loss:.6f}')
         # 保存
         torch.save(self.state_dict(), f'{save_dir}/{num}.pth')
         print()
@@ -674,27 +677,39 @@ def setseed(seed):
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
 
-def gif2pkl(dataset_path):
+def gif2pkl(dataset_path, threshold=None):
     src = glob(os.path.join(dataset_path, '*success1.gif'))
+    count = 0
+
     for i, gif_path in enumerate(src, 1):
         gif_name = os.path.splitext(os.path.basename(gif_path))[0]
-        frames = []
-        gif = cv2.VideoCapture(gif_path)
-        while True:
-            ret, frame = gif.read()
-            if not ret: break
-            frames.append(frame)
-        frames = np.array(frames, np.uint8).transpose(0, 3, 1, 2)
-        pkl_path = os.path.join(dataset_path, f'{gif_name}.pkl')
-        with open(pkl_path, 'wb') as f:
-            pickle.dump(frames, f)
-        if i % 10 == 0:
-            print(f'{i}/{len(src)}')
+        ret_value = int(gif_name.split('_')[1][3:])
+
+        if threshold is None or ret_value > threshold:
+            count += 1
+            frames = []
+            gif = cv2.VideoCapture(gif_path)
+            while True:
+                ret, frame = gif.read()
+                if not ret: break
+                frames.append(frame)
+            frames = np.array(frames, np.uint8).transpose(0, 3, 1, 2)
+            pkl_path = os.path.join(dataset_path, f'{gif_name}.pkl')
+            with open(pkl_path, 'wb') as f:
+                pickle.dump(frames, f)
+
+    if threshold is not None:
+        print(f'Total number of files with ret > {threshold}: {count}')
+    else:
+        print(f'Total number of files processed: {count}')
+
+
 
 if __name__ == '__main__':
-    task = 'grass'
-    src_root = ["/home/like/minecraft_ppo/checkpoint/2-base-harvest_1_tallgrass-seed7/gif/",
-                "/home/like/minecraft_ppo/checkpoint/base-harvest_1_tallgrass-seed7/gif"]
+    task = 'sunflower'
+    src_root = ["/home/ps/Plan4MC/checkpoint/Expert_ppo_double_plant_re-1.0_lbmda0.8_seed42",
+                ]
+    threshold = 100 # default: None (process all the success gif files without filtering the return value)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=666)
@@ -709,5 +724,5 @@ if __name__ == '__main__':
     ssmodel = SSTransformer(config).to(device)
     
     # 训练以及测试
-    ssmodel.trainss(src_root)
+    ssmodel.trainss(src_root, threshold)
     # ssmodel.test_TDR()

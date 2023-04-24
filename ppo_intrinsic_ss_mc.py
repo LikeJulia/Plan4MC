@@ -348,9 +348,8 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
     model_clip.eval()
     print('MineCLIP model loaded.')
 
-    if args.task.startswith('combat'):
-        args.target_name = args.task.split("_")[1]
-        print(f"Combat Target: {args.target_name}")
+    args.target_name = args.task.split("_")[1]
+    print(f"Combat Target: {args.target_name}")
 
     # Instantiate environment
     env = MinecraftEnv(
@@ -673,7 +672,7 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
                     imitation_buf.eval_and_store(obs_, act_, ep_ret_ss, int(ep_success), rgb_list, None)
 
                     # save the gif
-                    if args.save_raw_rgb and ((epoch % save_freq == 0) or (epoch == epochs - 1)): # and int(ep_success) == 1:
+                    if args.save_raw_rgb and ((epoch % save_freq == 0) or (epoch == epochs - 1)) and episode_in_epoch_cnt == 0:
                         pth = os.path.join(args.save_path, '{}_{}_ss{:.2f}_success{}.gif'.format(epoch, episode_in_epoch_cnt, float(ep_ret_ss), int(ep_success)))
                         imageio.mimsave(pth, [np.transpose(i_, [1,2,0]) for i_ in rgb_list], duration=0.1)
                         # logger.save_state({'env': env}, None)
