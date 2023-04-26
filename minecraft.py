@@ -255,7 +255,6 @@ class MinecraftEnv:
                 (np.pi * pitch / 180, np.pi * yaw / 180, 50)
                     for pitch in np.arange(-30, 30, 6)
                     for yaw in np.arange(-45, 45, 9)])
-            self._target_name = self.target_name
             self._consecutive_distances = deque(maxlen=2)
             self._distance_min = np.inf
         self._first_reset = True

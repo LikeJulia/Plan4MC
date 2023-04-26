@@ -559,7 +559,7 @@ class SSTransformer(nn.Module):
             self.initialized = True
 
         # 训练
-        save_dir = f'ssmodel-exp/{task}_TDR/'
+        save_dir = f'elemodel-exp/{task}_TDR/'
         exp_logger = Logger(save_dir, f'trainss.csv',fieldnames=['update', 'TDR_loss'])
         self.train()  # 测试时model.eval()关闭dropout和batchnorm
         num = 0
@@ -582,7 +582,7 @@ class SSTransformer(nn.Module):
         torch.save(self.state_dict(), f'{save_dir}/{num}.pth')
         print()
 
-    def cal_intrinsic_s2e(self, states_ls,device=torch.device('cuda')):
+    def cal_intrinsic_s2e(self, states_ls,horizen,device=torch.device('cuda')):
         '''
         states:(block_size+1,4,84,84)
         step:标量
@@ -595,7 +595,8 @@ class SSTransformer(nn.Module):
                 embeddings = self.encoder(states[0]).unsqueeze(0)  # (1, block_size+1, n_embd)
                 if embeddings.shape[1] <= 1: continue
                 cur_embedding, next_embedding = embeddings[:, :-1, :], embeddings[:, 1:,:]  # (1, block_size+1, n_embd)
-                ps = self.tdr.symexp(self.tdr(cur_embedding, next_embedding).view(-1))
+                limit = torch.log(1 + torch.Tensor([horizen]).to(device))
+                ps = self.tdr.symexp(self.tdr(cur_embedding, next_embedding).clamp(-limit,limit).view(-1))
                 progress_span = torch.cat((progress_span, ps), dim=0)
             intrinsic = progress_span.detach().cpu().numpy()
             return intrinsic,intrinsic,intrinsic
@@ -625,8 +626,8 @@ def gif2pkl(dataset_path):
             print(f'{i}/{len(src)}')
 
 if __name__ == '__main__':
-    task = 'beef'
-    src_root = ["/home/ps/Desktop/Plan4MC/test_hard_tasks/harvest_beef_with_diamond_sword_base",
+    task = 'milk'
+    src_root = ["/home/ps/Desktop/Plan4MC/test_hard_tasks/harvest_milk_with_empty_bucket_and_cow",
                 ]
 
     parser = argparse.ArgumentParser()

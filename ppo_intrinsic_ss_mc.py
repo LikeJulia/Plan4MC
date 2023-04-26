@@ -649,10 +649,8 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
                 if args.intri_type == 'ds':
                     ep_rewards_ss = ss_reward_model.cal_intrinsic_s2e(ep_obs)[1]
                 if args.intri_type == 'ps':
-                    ep_rewards_ss = ss_reward_model.cal_intrinsic_s2e(ep_obs)[2]
+                    ep_rewards_ss = ss_reward_model.cal_intrinsic_s2e(ep_obs, args.horizon)[2]
                 # print(ep_obs.shape)
-                # print(ep_rewards_ss.shape)
-                # print(ep_rewards.shape)
                 assert len(ep_rewards) == len(ep_rewards_ss)
                 ep_rewards = args.env_reward * np.asarray(ep_rewards) + args.ss_coff * ep_rewards_ss
                 ep_ret_ss = np.sum(ep_rewards_ss)

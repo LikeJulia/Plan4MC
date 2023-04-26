@@ -65,7 +65,7 @@ if __name__ == '__main__':
     parser.add_argument('--lmbda', type=float, default=0.8)
     parser.add_argument('--biome', type=str, default='plains')
     parser.add_argument('--stg', type=int, required=True)
-    parser.add_argument('--algo', type=str, default='tdr')
+    parser.add_argument('--algo', type=str, required=True)
     args = parser.parse_args()
     #print(args)
     
