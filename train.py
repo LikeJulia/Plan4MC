@@ -17,7 +17,7 @@ if __name__ == '__main__':
     parser.add_argument('--steps', type=int, required=True) # sample steps per epoch (buffer size * workers)
     parser.add_argument('--epochs', type=int, default=1000) # epoch number
     parser.add_argument('--save-path', type=str, default='checkpoint') # model save path
-    parser.add_argument('--exp-name', type=str, default='ppo') # log name
+    parser.add_argument('--exp-name', type=str, required=True) # log name
     #parser.add_argument('--mode', type=str, default='DIRECT') # GUI if use real time render
     parser.add_argument('--task', type=str,required=True) # task_id
     parser.add_argument('--horizon', type=int, required=True) # task horizon. 500 in the current released code
