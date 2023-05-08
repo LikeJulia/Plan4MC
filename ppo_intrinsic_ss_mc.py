@@ -652,6 +652,9 @@ def ppo_selfimitate_ss(args, ss_reward_model,seed=0, device=None,
                     ep_rewards_ss = ss_reward_model.cal_intrinsic_s2e(ep_obs/255.)[2]
                 assert len(ep_rewards) == len(ep_rewards_ss)
                 ep_rewards = args.env_reward * np.asarray(ep_rewards) + args.ss_coff * ep_rewards_ss
+                # print the averaged ep_rewards_ss
+                print("averaged ss rewards: ", np.mean(ep_rewards_ss))
+
                 ep_ret_ss = np.sum(ep_rewards_ss)
                 ep_ret += ep_ret_ss
                 buf.modify_trajectory_rewards(ep_rewards)
